@@ -29,7 +29,7 @@ AtAv = (n, x, y, t):
   Atv (n, t, y).
 
 n = 100
-u = list(n), v = list(n), t = list(n)
+u = array(n), v = array(n), t = array(n)
 i = 0
 while (i < n):
   u (i) = 1
@@ -49,4 +49,4 @@ while (i < n):
   i++.
 
 a = vBv / vv
-a sqrt string slice (0, 11)
+a sqrt string slice (0, 11) say
