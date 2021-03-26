@@ -73,7 +73,7 @@ R(D) = OP R(A), R(B) is not needed.
 #include <stdarg.h>
 #include <stdlib.h>
 #include <math.h>
-#include "potion.h"
+#include "p2.h"
 #include "internal.h"
 #include "opcodes.h"
 #include "asm.h"

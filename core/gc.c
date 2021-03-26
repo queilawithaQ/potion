@@ -9,7 +9,7 @@ http://starynkevitch.net/Basile/qishintro.html
 */
 #include <stdio.h>
 #include <stdlib.h>
-#include "potion.h"
+#include "p2.h"
 #include "internal.h"
 #include "gc.h"
 #include "khash.h"
@@ -75,6 +75,7 @@ static PN_SIZE pngc_mark_array(Potion *P, register _PN *x, register long n, int 
         break;
         case 1: // minor
           if (!IS_GC_PROTECTED(v) && IN_BIRTH_REGION(v) && HAS_REAL_TYPE(v)) {
+	    // gc-test crash: P->vts = NULL
             GC_FORWARD(x, v);
             i++;
             DBG_Gv(P,"GC mark minor %p -> 0x%lx %6x\n", x, v, PN_TYPE(*x));

@@ -46,7 +46,7 @@
 */
 
 #include <stdio.h>
-#include "potion.h"
+#include "p2.h"
 
 /* Period parameters */  
 #define N 624

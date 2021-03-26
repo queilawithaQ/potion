@@ -1,12 +1,13 @@
 body {
   font: normal 14px arial, sans-serif;
   line-height: 140%;
-  margin: 0; padding: 40px 0 180px 0;
+  margin: 0; padding: 10px 0 180px 0;
 }
 h1, h4 {
   text-align: center;
 }
 h1 {
+  line-height: 100%;
   color: #390;
 }
 h1.kana {
@@ -50,4 +51,7 @@ pre {
   background: #CE6;
   color: #500;
   font-weight: bold;
+}
+dt {
+  font: bold 16px arial, sans-serif;
 }

@@ -1,47 +1,74 @@
-/** \file ast.h
- the ast for Potion code in-memory
-
- (c) 2008 why the lucky stiff, the freelance professor */
+//
+// ast.h
+// the ast for Potion code in-memory
+//
+// (c) 2008 why the lucky stiff, the freelance professor
+//
 #ifndef POTION_AST_H
 #define POTION_AST_H
 
-/// PNArg - call a function (unused). See now macro PN_S(name,1), PN_S(name,2)
 typedef struct {
-  PN v; ///< args
-  PN b; ///< block
+  PN v;
+  PN b;
 } PNArg;
 
-
-// PN_AST - tree-types, now in potion.h
-//enum PN_AST {
-//};
+enum PN_AST {
+  AST_CODE,
+  AST_VALUE,
+  AST_ASSIGN,
+  AST_NOT,
+  AST_OR,
+  AST_AND,
+  AST_CMP,
+  AST_EQ,
+  AST_NEQ,
+  AST_GT,
+  AST_GTE,
+  AST_LT,
+  AST_LTE,
+  AST_PIPE,
+  AST_CARET,
+  AST_AMP,
+  AST_WAVY,
+  AST_BITL,
+  AST_BITR,
+  AST_PLUS,
+  AST_MINUS,
+  AST_INC,
+  AST_TIMES,
+  AST_DIV,
+  AST_REM,
+  AST_POW,
+  AST_MESSAGE,
+  AST_PATH,
+  AST_QUERY,
+  AST_PATHQ,
+  AST_EXPR,
+  AST_LIST, /* was TABLE: () lua hash */
+  AST_BLOCK,
+  AST_LICK,
+  AST_PROTO
+};
 
 #define PN_TOK_MISSING 0x10000
 
-#define PN_AST(T, A, N, L)        potion_source(P, AST_##T, A, PN_NIL, PN_NIL, N, L)
-#define PN_AST2(T, A, B, N, L)    potion_source(P, AST_##T, A, B, PN_NIL, N, L)
-#define PN_AST3(T, A, B, C, N, L) potion_source(P, AST_##T, A, B, C, N, L)
-#define PN_AST_(T, A)          potion_source(P, AST_##T, A, PN_NIL, PN_NIL, -1, PN_NIL)
-#define PN_AST2_(T, A, B)      potion_source(P, AST_##T, A, B, PN_NIL, -1, PN_NIL)
-#define PN_AST3_(T, A, B, C)   potion_source(P, AST_##T, A, B, C, -1, PN_NIL)
-//! Warning: This might conflict with the typedef struct PN_OP
-#define PN_OP(T, A, B)         potion_source(P, T, A, B, PN_NIL, 0, PN_NIL)
-#define PN_TUPIF(T)   PN_IS_TUPLE(T) ? T : PN_TUP(T)
-#define PN_SRC(S)     ((struct PNSource *)S)
+#define PN_AST(T, A)  potion_source(P, AST_##T, A, PN_NIL, PN_NIL)
+#define PN_AST2(T, A, B)  potion_source(P, AST_##T, A, B, PN_NIL)
+#define PN_OP(T, A, B)    potion_source(P, T, A, B, PN_NIL)
+#define PN_AST3(T, A, B, C)  potion_source(P, AST_##T, A, B, C)
 #define PN_PART(S)    ((struct PNSource *)S)->part
-#define PN_S_(S, N)   ((struct PNSource *)S)->a[N] //lvalue
-#define PN_S(S, N)    (PN)(((struct PNSource *)S)->a[N])
+#define PN_S(S, N)    ((struct PNSource *)S)->a[N]
 #define PN_CLOSE(B) ({ \
     PN endname = B; \
     if (PN_IS_TUPLE(endname)) endname = PN_TUPLE_AT(endname, 0); \
     if (endname != PN_NIL) { \
       if (PN_PART(endname) == AST_EXPR) endname = PN_TUPLE_AT(PN_S(endname, 0), 0); \
-      if (PN_PART(endname) == AST_MSG || PN_PART(endname) == AST_PATH) \
+      if (PN_PART(endname) == AST_MESSAGE || PN_PART(endname) == AST_PATH) \
         endname = PN_S(endname, 0); \
       if (P->unclosed == endname) { P->unclosed = PN_NIL; } \
     } \
   })
 
-PN potion_source(Potion *, u8, PN, PN, PN, int, PN);
+PN potion_source(Potion *, u8, PN, PN, PN);
 
 #endif

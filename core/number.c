@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <math.h>
-#include "potion.h"
+#include "p2.h"
 #include "internal.h"
 
 /// new PNDouble (double)

@@ -16,20 +16,6 @@
 
 Potion *P;
 
-#if defined(DEBUG)
-#define DBG_Gv(P,...)				\
-  if (P->flags & (DEBUG_GC | DEBUG_VERBOSE)) {	\
-    printf(__VA_ARGS__);			\
-  }
-#define DBG_G(P,...)	       \
-  if (P->flags & DEBUG_GC) {   \
-    printf(__VA_ARGS__);       \
-  }
-#else
-#define DBG_Gv(...)
-#define DBG_G(...)
-#endif
-
 void gc_test_start(CuTest *T) {
   CuAssert(T, "GC struct isn't at start of first page", P->mem == P->mem->birth_lo);
   CuAssert(T, "stack length is not a positive number", potion_stack_len(P, NULL) > 0);
@@ -43,23 +29,7 @@ void gc_test_alloc1(CuTest *T) {
   PN ptr = (PN)potion_gc_alloc(P, PN_TUSER, 16);
   PN_SIZE count = potion_mark_stack(P, 0);
   CuAssert(T, "couldn't allocate 16 bytes from GC", PN_IS_PTR(ptr));
-  CuAssert(T, "only one or two allocations should be found", count >= 1 && count <= 2);
-}
-
-void gc_test_gc_minor(CuTest *T) {
-  potion_str_hash_init(P);
-  PN ptr = (PN)potion_gc_alloc(P, PN_TUSER, 16);
-  PN s1 = PN_STR("teststring");
-  potion_garbagecollect(P, POTION_PAGESIZE, 0);
-  CuAssert(T, "couldn't allocate 16 bytes from GC", PN_IS_PTR(ptr));
-  CuAssert(T, "s1", PN_IS_STR(s1));
-}
-void gc_test_gc_major(CuTest *T) {
-  POTION_INIT_STACK(sp);
-  P = potion_create(sp);
-  PN ptr = (PN)potion_gc_alloc(P, PN_TUSER, 16);
-  potion_garbagecollect(P, POTION_PAGESIZE, 1);
-  CuAssert(T, "couldn't allocate 16 bytes from GC", PN_IS_PTR(ptr));
+  CuAssertIntEquals(T, "only one allocation should be found", 1, count);
 }
 
 void gc_test_alloc4(CuTest *T) {
@@ -76,14 +46,13 @@ void gc_test_alloc4(CuTest *T) {
 }
 
 void gc_test_forward(CuTest *T) {
+  PN_SIZE count;
   char *fj = "frances johnson.";
   vPN(Data) ptr = potion_data_alloc(P, 16);
   register unsigned long old = (PN)ptr & 0xFFFF;
   memcpy(ptr->data, fj, 16);
 
-  //DBG_Gv(P,"forward ptr->data: %p \"%s\"\n", &ptr->data, ptr->data);
-  potion_mark_stack(P, 1);
-  //DBG_Gv(P,"marked ptr->data: %p \"%s\"\n", &ptr->data, ptr->data);
+  count = potion_mark_stack(P, 1);
   CuAssert(T, "copied location identical to original", (old & 0xFFFF) != (PN)ptr);
   CuAssertIntEquals(T, "copied object not still PN_TUSER", ptr->vt, PN_TUSER);
   CuAssert(T, "copied data not identical to original",
@@ -93,36 +62,29 @@ void gc_test_forward(CuTest *T) {
 CuSuite *gc_suite() {
   CuSuite *S = CuSuiteNew();
   SUITE_ADD_TEST(S, gc_test_start);
-#ifndef __SANITIZE_ADDRESS__
+#if !(defined(__clang__) && defined(__SANITIZE_ADDRESS__))
   SUITE_ADD_TEST(S, gc_test_alloc1);
-  SUITE_ADD_TEST(S, gc_test_alloc4);
 #endif
+  SUITE_ADD_TEST(S, gc_test_alloc4);
+#if !(defined(__clang__) && defined(__SANITIZE_ADDRESS__))
   SUITE_ADD_TEST(S, gc_test_forward);
-  SUITE_ADD_TEST(S, gc_test_gc_minor);
-  SUITE_ADD_TEST(S, gc_test_gc_major);
+#endif
   return S;
 }
 
-int main(int argc, char **argv) {
+int main(void) {
   POTION_INIT_STACK(sp);
   int count;
 
   // manually initialize the older generation
   P = potion_gc_boot(sp);
-  if (argc == 2) {
-#ifdef DEBUG
-    if (!strcmp(argv[1], "-DG"))  P->flags |= DEBUG_GC;
-    if (!strcmp(argv[1], "-DGv")) P->flags |= (DEBUG_GC|DEBUG_VERBOSE);
-#endif
-  }
   if (P->mem->old_lo == NULL) {
     struct PNMemory *M = P->mem;
     int gensz = POTION_BIRTH_SIZE * 2;
     void *page = pngc_page_new(&gensz, 0);
-    if (page == NULL)
-      potion_fatal("Not enough memory");
     SET_GEN(old, page, gensz);
   }
+
   CuString *out = CuStringNew();
   CuSuite *suite = gc_suite();
   CuSuiteRun(suite);

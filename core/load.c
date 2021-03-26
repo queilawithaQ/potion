@@ -1,53 +1,47 @@
-/** \file load.c
- loading of external code, bytecode and shared libs
-
- (c) 2008 why the lucky stiff, the freelance professor
- (c) 2013 by perl11 org */
+//
+// load.c
+// loading of external code
+//
+// (c) 2008 why the lucky stiff, the freelance professor
+// (c) 2013 by perl11 org
+//
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
-#include "potion.h"
+#include "p2.h"
 #include "internal.h"
 #include "table.h"
 
-static PN potion_load_code(Potion *P, const char *filename) {
+void potion_load_code(Potion *P, const char *filename) {
   PN buf, code;
   struct stat stats;
   int fd = -1;
-  PN result = PN_NIL;
-  // TOCTTOU http://cwe.mitre.org/data/definitions/367.html
+  if (stat(filename, &stats) == -1) {
+    fprintf(stderr, "** %s does not exist.", filename);
+    return;
+  }
   fd = open(filename, O_RDONLY | O_BINARY);
   if (fd == -1) {
-    if (stat(filename, &stats) == -1) {
-      fprintf(stderr, "** %s does not exist.", filename);
-    } else {
-      fprintf(stderr, "** could not open %s. check permissions.", filename);
-    }
-    return PN_NIL;
-  }
-  if (stat(filename, &stats) == -1) {
-    fprintf(stderr, "** %s vanished!", filename);
-    close(fd);
-    return PN_NIL;
+    fprintf(stderr, "** could not open %s. check permissions.", filename);
+    return;
   }
   buf = potion_bytes(P, stats.st_size);
   if (read(fd, PN_STR_PTR(buf), stats.st_size) == stats.st_size) {
     PN_STR_PTR(buf)[stats.st_size] = '\0';
     code = potion_source_load(P, PN_NIL, buf);
     if (!PN_IS_PROTO(code)) {
-      result = potion_run(P, potion_send(
+      potion_run(P, potion_send(
 	  potion_parse(P, buf, (char *)filename),
-          PN_compile, potion_str(P, filename), PN_NIL),
-        POTION_JIT);
+	  PN_compile, potion_str(P, filename), PN_NIL),
+	POTION_JIT);
     }
   } else {
     fprintf(stderr, "** could not read entire file: %s.", filename);
   }
   close(fd);
-  return result;
 }
 
 static char *potion_initializer_name(Potion *P, const char *filename, PN_SIZE len) {
@@ -67,34 +61,36 @@ static char *potion_initializer_name(Potion *P, const char *filename, PN_SIZE le
   return func_name;
 }
 
-/// \return the handle as mangled int (might be too large)
-static PN potion_load_dylib(Potion *P, const char *filename) {
-  void *handle = dlopen(filename, RTLD_LAZY); // XXX when can we close this?
+void potion_load_dylib(Potion *P, const char *filename) {
+  void *handle = dlopen(filename, RTLD_LAZY);
   void (*func)(Potion *);
   char *err, *init_func_name;
   if (handle == NULL) {
     // TODO: error
     fprintf(stderr, "** error loading %s: %s\n", filename, dlerror());
-    return PN_NIL;
+    return;
   }
   init_func_name = potion_initializer_name(P, filename, strlen(filename));
-  func = (void (*)(Potion *))dlsym(handle, init_func_name);
-  err = (char *)dlerror();
-  if (err != NULL) {
-    fprintf(stderr, "** error loading %s in %s: %s\n", init_func_name, filename, err);
-    free(init_func_name);
-    dlclose(handle);
-    return PN_NIL;
-  }
+  func = dlsym(handle, init_func_name);
+  err = dlerror();
   free(init_func_name);
+  if (err != NULL) {
+    fprintf(stderr, "** error loading %s: %s\n", filename, err);
+    dlclose(handle);
+    return;
+  }
   func(P);
-  return PN_INT(handle);
 }
 
 static PN pn_loader_path;
 static const char *pn_loader_extensions[] = {
+#ifndef P2
   ".pnb"
   , ".pn"
+#else
+  ".plc"
+  , ".pl"
+#endif
   , POTION_LOADEXT
 };
 
@@ -116,10 +112,9 @@ static const char *find_extension(char *str) {
   return NULL;
 }
 
-char *potion_find_file(Potion *P, char *str, PN_SIZE str_len) {
+char *potion_find_file(char *str, PN_SIZE str_len) {
   char *r = NULL;
   struct stat st;
-  if (!str_len) str_len = strlen(str);
   PN_TUPLE_EACH(pn_loader_path, i, prefix, {
     PN_SIZE prefix_len = PN_STR_LEN(prefix);
     char dirname[prefix_len + 1 + str_len + 1];
@@ -160,12 +155,9 @@ char *potion_find_file(Potion *P, char *str, PN_SIZE str_len) {
   return r;
 }
 
+#ifndef P2
 PN potion_load(Potion *P, PN cl, PN self, PN file) {
-  if (!file && PN_IS_STR(self))
-    file = self;
-  char *filename = potion_find_file(P, PN_STR_PTR(file), PN_STR_LEN(file));
-  char *file_ext;
-  PN result = PN_NIL;
+  char *filename = potion_find_file(PN_STR_PTR(file), PN_STR_LEN(file)), *file_ext;
   if (filename == NULL) {
     fprintf(stderr, "** can't find %s\n", PN_STR_PTR(file));
     return PN_NIL;
@@ -174,33 +166,62 @@ PN potion_load(Potion *P, PN cl, PN self, PN file) {
   while (*--file_ext != '.' && file_ext >= filename);
   if (file_ext++ != filename) {
     if (strcmp(file_ext, "pn") == 0)
-      result = potion_load_code(P, filename);
+      potion_load_code(P, filename);
     else if (strcmp(file_ext, "pnb") == 0)
-      result = potion_load_code(P, filename);
+      potion_load_code(P, filename);
     else if (strcmp(file_ext, POTION_LOADEXT+1) == 0)
-      result = potion_load_dylib(P, filename);
+      potion_load_dylib(P, filename);
     else
       fprintf(stderr, "** unrecognized file extension: %s\n", file_ext);
   } else {
     fprintf(stderr, "** no file extension: %s\n", filename);
   }
   free(filename);
-  return result;
+  return PN_NIL;
+}
+
+#else
+
+PN p2_load(Potion *P, PN cl, PN self, PN file) {
+  char *filename = potion_find_file(PN_STR_PTR(file), PN_STR_LEN(file)), *file_ext;
+  if (filename == NULL) {
+    fprintf(stderr, "** can't find %s\n", PN_STR_PTR(file));
+    return PN_NIL;
+  }
+  file_ext = filename + strlen(filename);
+  while (*--file_ext != '.' && file_ext >= filename);
+  if (file_ext++ != filename) {
+    if (strcmp(file_ext, "pl") == 0)
+      p2_load_code(P, filename);
+    else if (strcmp(file_ext, "plc") == 0)
+      p2_load_code(P, filename);
+    else if (strcmp(file_ext, POTION_LOADEXT+1) == 0)
+      potion_load_dylib(P, filename);
+    else
+      fprintf(stderr, "** unrecognized file extension: %s\n", file_ext);
+  } else {
+    fprintf(stderr, "** no file extension: %s\n", filename);
+  }
+  free(filename);
+  return PN_NIL;
+}
+#endif
+
+void potion_loader_init(Potion *P) {
+  pn_loader_path = PN_TUP0();
+  PN_PUSH(pn_loader_path, potion_str(P, "lib"));
+  PN_PUSH(pn_loader_path, potion_str(P, POTION_PREFIX"/lib/potion"));
+  PN_PUSH(pn_loader_path, potion_str(P, "."));
+
+#ifdef P2
+#define LOADER_PATH "@INC"
+#else
+#define LOADER_PATH "LOADER_PATH"
+#endif
+  potion_define_global(P, potion_str(P, LOADER_PATH), pn_loader_path);
+  potion_method(P->lobby, "load", potion_load, "file=S");
 }
 
 void potion_loader_add(Potion *P, PN path) {
   PN_PUSH(pn_loader_path, path);
-}
-
-void potion_loader_init(Potion *P) {
-  pn_loader_path = PN_TUP0();
-  // relocatable path - relative to exe in argv[0]
-  //PN arg0 = potion_send(potion_str(P, "$^X")); // but too early for argv[0]
-  //if (arg0) PN_PUSH(pn_loader_path, potion_strcat(P, basename(PN_STR_PTR(arg0)), "../lib/potion"));
-  PN_PUSH(pn_loader_path, potion_str(P, "lib/potion"));
-  PN_PUSH(pn_loader_path, potion_str(P, POTION_PREFIX"/lib/potion"));
-  PN_PUSH(pn_loader_path, potion_str(P, "."));
-  
-  potion_define_global(P, potion_str(P, "LOADER_PATH"), pn_loader_path);
-  potion_method(P->lobby, "load", potion_load, "file=S");
 }

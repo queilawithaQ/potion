@@ -21,8 +21,7 @@ h2. Special Things?
 So is there anything unusual about Potion? Anything of particular interest?
 
 * Potion compiles programs down to machine code.
-* It includes a small generational near-exact garbage collector,
-  spending on avg 4ms on medium sized heaps.
+* It includes a small generational near-exact garbage collector.
 * It is two languages: one for code, one for data.
 * It's written in under 10,000 lines of C.
 
@@ -342,14 +341,11 @@ Potion has three keywords for these built-in types.
 
 @true@ and @false@ are boolean values belonging to the @Boolean@ class.
 
-Anything which is not @nil@ or @false@ is considered a positive value. (Which means that the number zero and empty strings are considered @true@ in if statements.)
+Anything which is not @nil@ or @false@ is considered a positive value. (Which means that the number zero is considered true in if statements.)
 
 h3. Numbers
 
-Basic numbers take up no memory and are passed as plain (32-bit or
-64-bit, depending on your processor) integers, but we loose one bit of
-precision for a tag bit. Arithmetic methods accept the type Number,
-which is Integer or Double and converts them as it fits.
+Basic numbers take up no memory and are passed as plain (32-bit or 64-bit, depending on your processor) integers.
 
 <pre>
 <code>
@@ -360,7 +356,7 @@ which is Integer or Double and converts them as it fits.
 </code>
 </pre>
 
-Double numbers use a boxed double-precision floating point number.
+Decimal numbers use a boxed double-precision floating point number.
 
 <pre>
 <code>
@@ -371,7 +367,7 @@ Double numbers use a boxed double-precision floating point number.
 </code>
 </pre>
 
-Seemless arbitrary-precision math is planned for the 1.0 release.
+Arbitrary-precision math is planned for 1.0 release.
 
 h3. Strings
 
@@ -458,10 +454,6 @@ Potion has no @for@ keyword. One alternative is the @to@ keyword.
 <code>
   1 to 5 (a):
     a string print.
-
-  num = argv(1) number
-  1 to (num, (a):
-    a print.)
 </code>
 </pre>
 
@@ -577,55 +569,37 @@ As with methods, you can query an object to see if it has a given path.
 
 h2. And That's It?
 
-Yes, that's the important stuff for now. But a number of new features are coming to Potion soon[3].
-
-* Assignment extended to match and bind, for expressing conditions on object layout.
-* FFI (@extern@), debuggers (-d), external compilers (-c) (_to c and native executable for the start_).
-* Types and symbol tables. Types to be faster, and symtabs to be slower and more like a LISP and perl/ruby.
-* Compiler macros and compiler optimizations, like tailcall, constant folding, strength reduction.
-* Bignums, marshalling.
-* More libraries for os, ui, db, ...
-* And also: Native threading. This is a biggie. It requires lock-free bags and some new native
-  atomic insns and parallelizing loops. The work-stealing sister language sol[4] looks good,
-  it can yield to other threads. But if or if not to steal work, and if or not share data.
-* Channels and blocking recv for typed task communications al la Go. On top of @aio@.
-* Eventually lists, implemented via licks, but with a LISPy feeling.
-
-This are already in, but documented elsewhere[5]:
+Yes, that's the important stuff for now. But a number of new features are coming to Potion soon.
 
 * Mixins, a syntax for blending methods into classes.
-* MOP, changing metaclasses, the behavior of classes.
 * Coroutines, a technique for inprocess threading.
-* Continuations, for saving and resuming the stack, @here@ and @yield@.
-* Exceptions for graceful error handling.
-* Asynchronous non-blocking IO in the @aio@ module.
-* Buffered stream FILE* IO in the @buffile@ module.
-* @readline@ module providing a little repl if called without script
-* Optional, named and default signature arguments.
+* Continuations, for saving and resuming the stack.
+* Pattern matching, for expressing conditions on object layout.
+* And also: bignums, marshalling.
 
 Thankyou for reading along. I hope this was only a brief interruption to an otherwise lush and exotic life. I'm sorry to disappoint with so little. Perhaps one day I can make things right?
 
 h2. Footnotes
 
-fn1. Potion the "programming language":http://github.com/perl11/potion. Not the drink of fables.
+fn1. The "programming language":http://github.com/perl11/potion. Not the drink of fables.
 
 fn2. "ECMAScript for XML":http://en.wikipedia.org/wiki/ECMAScript_for_XML. (See also: "s-expression":http://en.wikipedia.org/wiki/S-Expression.)
 
-fn3. "Potion wiki":https://github.com/perl11/potion/wiki/_pages.
+h2. potion's and p2 license
 
-fn4. "sol":http://github.com/rsms/sol.
-
-fn5. "Potion Documentation":http://perl11.org/potion/html/.
-
-h2. Potion's License
-
-Potion is free software, released under an MIT license -- the very brief paragraphs below. There is satisfaction simply in having created this. Please use this how you may, even in commercial or academic software. I've had a good time and am want for nothing.
+p2 is free software, released under an MIT and ARTISTIC 2 license --
+the very brief paragraphs below. There is satisfaction simply in
+having created this. Please use this how you may, even in commercial
+or academic software. I've had a good time and am want for nothing.
 
 <hr />
 
-Copyright (c) 2009 why the lucky stiff
+Copyright (c) 2009 why the lucky stiff, MIT licensed.
+ 
+p2 and maintainance code by perl11 http://perl11.org/p2/
+  (c) 2013 perl11 org, licensed under the ARTISTIC 2.
 
-HOWEVER. The follow MIT licensed codes have been employed.
+HOWEVER. The follow MIT licensed codes have also been employed:
 
 Be it known, parts of the object model taken from "obj.c":http://www.piumarta.com/software/id-objmodel/.
   (c) 2007 Ian Piumarta
@@ -639,8 +613,21 @@ The Mersenne Twister ("MT19937":http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/
 Lastly, "khash.h":http://attractivechaos.awardspace.com/khash.h.html.
   (c) 2008, by Attractive Chaos
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
   
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
    
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

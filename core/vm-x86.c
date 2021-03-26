@@ -7,7 +7,7 @@ the x86 and x86_64 jit.
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "potion.h"
+#include "p2.h"
 #include "internal.h"
 #include "opcodes.h"
 #include "asm.h"
