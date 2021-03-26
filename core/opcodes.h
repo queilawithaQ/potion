@@ -33,6 +33,7 @@ enum PN_OPCODE {
   OP_POW,
   OP_NOT,
   OP_CMP,
+  OP_EQUAL,
   OP_EQ,
   OP_NEQ,
   OP_LT,

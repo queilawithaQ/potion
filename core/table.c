@@ -1,15 +1,14 @@
 ///\file table.c
-/// implement unordered hashes and tuples (arrays) (PNTable, PNTuple)
+/// implement unordered hashes and ordered lists (PNTable and PNTuple)
 ///\class PNTable - unordered hash, the central table type, based on khash
-///\class PNTuple - array
+///\class PNTuple - ordered list (array)
 //
 // (c) 2008 why the lucky stiff, the freelance professor
-// (c) 2013-2015 perl11 org
-
+// (c) 2013 perl11 org
 //
 #include <stdio.h>
 #include <stdlib.h>
-#include "p2.h"
+#include "potion.h"
 #include "internal.h"
 #include "khash.h"
 #include "table.h"
@@ -41,14 +40,14 @@ PN potion_table_string(Potion *P, PN cl, PN self) {
 /// "empty" method
 ///\return PNTable
 PN potion_table_empty(Potion *P) {
-  return (PN)PN_ALLOC(PN_TTABLE, struct PNTable);
+  return (PN)PN_ALLOC_N(PN_TTABLE, struct PNTable, 0);
 }
 
 ///\return self PNTable
 PN potion_table_cast(Potion *P, PN self) {
   if (PN_IS_TUPLE(self)) {
     int ret; unsigned k;
-    vPN(Table) t = PN_ALLOC(PN_TTABLE, struct PNTable);
+    vPN(Table) t = PN_ALLOC_N(PN_TTABLE, struct PNTable, 0);
     PN_TUPLE_EACH(self, i, v, {
       k = kh_put(PN, t, PN_NUM(i), &ret);
       PN_QUICK_FWD(struct PNTable *, t);
@@ -89,32 +88,6 @@ PN potion_table_each(Potion *P, PN cl, PN self, PN block) {
       PN_CLOSURE(block)->method(P, block, P->lobby, kh_key(PN, t, k), kh_val(PN, t, k));
     }
   return self;
-}
-
-///\memberof PNTable
-/// "map" method. Calls the block function on every element, and returns a
-/// list of all results in unspecified order.
-///\param block PNClosure with one or two args. The first arg is the key,
-/// the optional second the value.
-///\return self PNTuple
-PN potion_table_map(Potion *P, PN cl, PN self, PN block) {
-  vPN(Table) t = (struct PNTable *)potion_fwd(self);
-  unsigned i = 0, k;
-  int with_val = potion_sig_arity(P, PN_CLOSURE(block)->sig) >= 2;
-  DBG_CHECK_TYPE(t,PN_TTABLE);
-  NEW_TUPLE(t2, kh_size(t));
-  for (k = kh_begin(t); k != kh_end(t); ++k)
-    if (kh_exist(PN, t, k)) {
-      PN ret;
-      if (with_val)
-        ret = PN_CLOSURE(block)->method(P, block, cl, kh_key(PN, t, k),
-                                                      kh_val(PN, t, k));
-      else
-        ret = PN_CLOSURE(block)->method(P, block, cl, kh_key(PN, t, k));
-      t2->set[i++] = ret;
-    }
-  PN_TOUCH(t2);
-  return (PN)t2;
 }
 
 ///\memberof PNTable
@@ -168,7 +141,7 @@ static
 PN potion_table_clone(Potion *P, PN cl, PN self) {
   vPN(Table) t = (vPN(Table))potion_fwd(self);
   DBG_CHECK_TYPE(t,PN_TTABLE);
-  vPN(Table) t2 = PN_ALLOC(PN_TTABLE, struct PNTable);
+  vPN(Table) t2 = (vPN(Table))PN_ALLOC_N(PN_TTABLE, struct PNTable, 0);
   unsigned k; int ret;
   t2 = kh_resize_PN(P, t2, kh_size(t));
   for (k = kh_begin(t); k != kh_end(t); ++k)
@@ -201,7 +174,7 @@ PN potion_table_slice(Potion *P, PN cl, PN self, PN keys) {
   else {
     DBG_CHECK_TYPE(keys,PN_TTUPLE);
   }
-  vPN(Table) t2 = PN_ALLOC(PN_TTABLE, struct PNTable);
+  vPN(Table) t2 = (vPN(Table))PN_ALLOC_N(PN_TTABLE, struct PNTable, 0);
   t2 = kh_resize_PN(P, t2, PN_TUPLE_LEN(keys)); //ca, could overshoot for dupl and outliers
   PN_TUPLE_EACH(keys, i, v, {
     DBG_vt("%d:%ld ", i, PN_INT(v));
@@ -256,38 +229,45 @@ PN potion_table_values(Potion *P, PN cl, PN self) {
   return (PN)t2;
 }
 
-///\memberof PNTable
-/// "filter" method. Calls the block function on every table element.
-///\param block PNClosure with one or two args. The first arg is the key,
-/// the optional second the value.
-///\return new PNTable with all elements that pass the
-/// test implemented by the provided function.
-PN potion_table_filter(Potion *P, PN cl, PN self, PN block) {
-  vPN(Table) t =  (vPN(Table))potion_fwd(self);
-  DBG_CHECK_TYPE(t,PN_TTABLE);
-  int with_val = potion_sig_arity(P, PN_CLOSURE(block)->sig) >= 2;
-  PN ret;
-  vPN(Table) t2 = (vPN(Table))potion_table_clone(P, cl, self);
-  unsigned k;
-  for (k = kh_begin(t); k != kh_end(t); ++k)
-    if (kh_exist(PN, t, k)) {
-      if (with_val)
-        ret = PN_CLOSURE(block)->method(P, block, cl, kh_key(PN, t, k),
-                                                      kh_val(PN, t, k));
-      else
-        ret = PN_CLOSURE(block)->method(P, block, cl, kh_key(PN, t, k));
-      if (!PN_TEST(ret))
-        kh_del(PN, t2, k);
+static
+PN potion_table_cmp(Potion *P, PN cl, PN self, PN value) {
+  DBG_CHECK_TYPE(self,PN_TTABLE);
+  switch (potion_type(value)) {
+  case PN_TBOOLEAN: // false < () < true
+    return value == PN_FALSE ? PN_NUM(-1) : PN_NUM(1);
+  case PN_TNIL:
+    return PN_NUM(-1); //nil < () < (...)
+  case PN_TTABLE: { // recurse. compare all keys and values
+    vPN(Table) t0 = (vPN(Table))potion_fwd(self);
+    vPN(Table) t1 = (vPN(Table))potion_fwd(value);
+    unsigned k;
+    PN cmp = PN_NUM(-1);
+    if (kh_size(t0) != kh_size(t1))
+      return kh_size(t0) < kh_size(t1) ? PN_NUM(-1) : PN_NUM(1);
+    for (k = kh_begin(t0); k != kh_end(t0); ++k) {
+      if (kh_exist(PN, t0, k) && kh_exist(PN, t1, k)) {
+        cmp = potion_send(kh_val(PN, t0, k), PN_cmp, kh_val(PN, t1, k));
+        if (cmp != PN_ZERO)
+          return cmp;
+      }
     }
-  PN_TOUCH(t2);
-  return (PN)t2;
+    return cmp;
+  }
+  default:
+    potion_fatal("Invalid table cmp type");
+    return 0;
+  }
+}
+
+static
+PN potion_table_equal(Potion *P, PN cl, PN self, PN value) {
+  if (PN_IS_TUPLE(self)) self = potion_table_cast(P, self);
+  DBG_CHECK_TYPE(self,PN_TTABLE);
+  return (PN_ZERO == potion_table_cmp(P, cl, self, value)) ? PN_TRUE : PN_FALSE;
 }
 
 // TUPLE - ordered lists, i.e. arrays in consecutive memory
 // not autovivifying
-
-#define GET(i)    t->set[i]
-#define SET(i,v)  t->set[i] = v
 
 PN potion_tuple_empty(Potion *P) {
   //NEW_TUPLE(t, 0);
@@ -304,7 +284,7 @@ PN potion_tuple_with_size(Potion *P, unsigned long size) {
 PN potion_tuple_new(Potion *P, PN value) {
   NEW_TUPLE(t, 3); // overallocate by 2 elems
   t->len = 1;
-  SET(0,value);
+  t->set[0] = value;
   return (PN)t;
 }
 
@@ -312,8 +292,8 @@ PN potion_tuple_push(Potion *P, PN tuple, PN value) {
   vPN(Tuple) t = PN_GET_TUPLE(tuple);
   DBG_CHECK_TUPLE(t);
   if (t->len >= t->alloc) {
-    PN_REALLOC(t, PN_TTUPLE, struct PNTuple, sizeof(PN) * (t->len * 2)); // overalloc by 2 times
-    t->alloc = t->len * 2;
+    PN_REALLOC(t, PN_TTUPLE, struct PNTuple, sizeof(PN) * (t->alloc + 3)); // overalloc by 2
+    t->alloc += 3;
   }
   t->set[t->len] = value;
   t->len++;
@@ -419,7 +399,7 @@ PN potion_tuple_slice(Potion *P, PN cl, PN self, PN start, PN end) {
     DBG_CHECK_INT(end);
     if (e < 0) e = t1->len + e;
     l = e - i;
-    if (l < 0) { i = e; l = labs(l) + 1; }
+    if (l < 0) { i = e; l = abs(l) + 1; }
     else l++;
     if (l > t1->len) l = t1->len; // permit overshoots
   }
@@ -435,11 +415,11 @@ PN potion_tuple_slice(Potion *P, PN cl, PN self, PN start, PN end) {
 
 ///\memberof PNTuple
 /// "each" method. call block on each member (linear order)
-///\param block PNClosure with one or an optional second index argument.
+///\param block PNClosure
 ///\return self PNTuple
 PN potion_tuple_each(Potion *P, PN cl, PN self, PN block) {
-  int with_index = potion_sig_arity(P, PN_CLOSURE(block)->sig) >= 2;
   DBG_CHECK_TUPLE(self);
+  int with_index = potion_sig_arity(P, PN_CLOSURE(block)->sig) >= 2;
   PN_TUPLE_EACH(self, i, v, {
     if (with_index)
       PN_CLOSURE(block)->method(P, block, P->lobby, v, PN_NUM(i));
@@ -447,60 +427,6 @@ PN potion_tuple_each(Potion *P, PN cl, PN self, PN block) {
       PN_CLOSURE(block)->method(P, block, P->lobby, v);
   });
   return self;
-}
-
-///\memberof PNTuple
-/// "map" method. Calls the block function on every element, and returns a
-/// list of all results.
-///\param block PNClosure with one argument, the tuple element.
-///\return new PNTuple with the same size.
-PN potion_tuple_map(Potion *P, PN cl, PN self, PN block) {
-  PN_SIZE len = PN_TUPLE_LEN(self);
-  NEW_TUPLE(t, len);
-  PN_TUPLE_EACH(self, i, v, {
-    PN ret = PN_CLOSURE(block)->method(P, block, cl, v);
-    SET(i, ret);
-  });
-  return (PN)t;
-}
-
-///\memberof PNTuple
-/// "reduce" method. call block on each member (linear order)
-///\param block PNClosure with two args. The first arg is the accumulator,
-/// the second the current element
-// \param initial PN this is used to seed the initial value, if it is not nil
-///\return initial PN the value of the accumulator at the end of the iterations
-PN potion_tuple_reduce(Potion *P, PN cl, PN self, PN block, PN initial) {
-  DBG_CHECK_TUPLE(self);
-  PN_TUPLE_EACH(self, i, v, {
-    if(i == 0 && initial == PN_NIL)
-      initial = v;
-    else
-      initial = PN_CLOSURE(block)->method(P, block, P->lobby, initial, v);
-  });
-  return initial;
-}
-
-///\memberof PNTuple
-/// "filter" method. Calls the block function on every element.
-///\param block PNClosure with one or two args. The first arg is the element,
-/// the optional second the index.
-///\return new PNTuple with all elements that pass the
-/// test implemented by the provided function.
-PN potion_tuple_filter(Potion *P, PN cl, PN self, PN block) {
-  DBG_CHECK_TUPLE(self);
-  int with_index = potion_sig_arity(P, PN_CLOSURE(block)->sig) >= 2;
-  PN ret;
-  PN tuple = potion_tuple_empty(P);
-  PN_TUPLE_EACH(self, i, v, {
-    if (with_index)
-      ret = PN_CLOSURE(block)->method(P, block, cl, v, PN_NUM(i));
-    else
-      ret = PN_CLOSURE(block)->method(P, block, cl, v);
-    if (PN_TEST(ret))
-      potion_tuple_push(P, tuple, v);
-  });
-  return tuple;
 }
 
 ///\memberof PNTuple
@@ -655,11 +581,13 @@ PN potion_tuple_reverse(Potion *P, PN cl, PN self) {
   return tuple;
 }
 
+#define GET(i)    t->set[i]
+#define SET(i,v)  t->set[i] = v
 //xor swap
-#define SWAP(a,b) if (a != b) {               \
-    t->set[a] ^= GET(b);      \
-    t->set[b] ^= GET(a);      \
-    t->set[a] ^= GET(b); }
+#define SWAP(a,b) if (a != b) { \
+  t->set[a] ^= GET(b); \
+  t->set[b] ^= GET(a); \
+  t->set[a] ^= GET(b); }
 
 /**\memberof PNTuple
   "remove" an element at index from tuple.
@@ -884,9 +812,9 @@ PN potion_tuple_cmp(Potion *P, PN cl, PN self, PN value) {
   DBG_CHECK_TYPE(self,PN_TTUPLE);
   switch (potion_type(value)) {
   case PN_TBOOLEAN: // false < () < true
-    return value == PN_FALSE ? -1 : 1;
+    return value == PN_FALSE ? PN_NUM(-1) : PN_NUM(1);
   case PN_TNIL:
-    return -1; //nil < () < (...)
+    return PN_NUM(-1); //nil < () < (...)
   case PN_TTUPLE: // recurse
     if(PN_TUPLE_LEN(self) && PN_TUPLE_LEN(value)) {
       PN cmp;
@@ -905,14 +833,21 @@ PN potion_tuple_cmp(Potion *P, PN cl, PN self, PN value) {
       }
     }
     else {
-      if (PN_TUPLE_LEN(value)) return -1;
-      else if (PN_TUPLE_LEN(self)) return 1;
-      else return 0;
+      if (PN_TUPLE_LEN(value)) return PN_NUM(-1);
+      else if (PN_TUPLE_LEN(self)) return PN_NUM(1);
+      else return PN_ZERO;
     }
   default:
     potion_fatal("Invalid tuple cmp type");
     return 0;
   }
+}
+
+static
+PN potion_tuple_equal(Potion *P, PN cl, PN self, PN value) {
+  //if (PN_IS_TABLE(self)) self = potion_tuple_cast(P, self);
+  DBG_CHECK_TYPE(self,PN_TTUPLE);
+  return (PN_ZERO == potion_tuple_cmp(P, cl, self, value)) ? PN_TRUE : PN_FALSE;
 }
 
 #undef SWAP
@@ -923,20 +858,7 @@ PN potion_tuple_cmp(Potion *P, PN cl, PN self, PN value) {
 /// global "list" method. return a new empty list
 ///\param size PNInteger
 ///\return PNTuple
-PN potion_lobby_array(Potion *P, PN cl, PN self, PN size) {
-  return potion_tuple_with_size(P, PN_INT(size));
-}
-
-///\memberof Lobby
-/// global deprecated "list" method. use array instead
-///\param size PNInteger
-///\return PNTuple
 PN potion_lobby_list(Potion *P, PN cl, PN self, PN size) {
-  static int printed = 0;
-  if (!printed) {
-    fprintf(stderr, "* list is deprecated, use array instead\n");
-    printed++;
-  }
   return potion_tuple_with_size(P, PN_INT(size));
 }
 
@@ -952,20 +874,16 @@ void potion_table_init(Potion *P) {
   potion_method(tbl_vt, "remove", potion_table_remove, "index=o");
   potion_method(tbl_vt, "string", potion_table_string, 0);
   potion_method(tbl_vt, "clone", potion_table_clone, 0);
-  potion_method(tbl_vt, "slice", potion_table_slice, "|keys=A");
+  potion_method(tbl_vt, "slice", potion_table_slice, "|keys=u");
   potion_method(tbl_vt, "keys", potion_table_keys, 0);
   potion_method(tbl_vt, "values", potion_table_values, 0);
-  potion_method(tbl_vt, "map", potion_table_map, "block=&");
-  potion_method(tbl_vt, "filter", potion_table_filter, "block=&");
+  potion_method(tbl_vt, "equal", potion_table_equal, "value=o");
 
   potion_type_call_is(tpl_vt, PN_FUNC(potion_tuple_at, "index=N"));
   potion_type_callset_is(tpl_vt, PN_FUNC(potion_tuple_put, "index=N,value=o"));
   potion_method(tpl_vt, "append", potion_tuple_append, "value=o");
   potion_method(tpl_vt, "at", potion_tuple_at, "index=N");
   potion_method(tpl_vt, "each", potion_tuple_each, "block=&");
-  potion_method(tpl_vt, "map", potion_tuple_map, "block=&");
-  potion_method(tpl_vt, "reduce", potion_tuple_reduce, "block=&,initial:=nil");
-  potion_method(tpl_vt, "filter", potion_tuple_filter, "block=&");
   potion_method(tpl_vt, "clone", potion_tuple_clone, 0);
   potion_method(tpl_vt, "first", potion_tuple_first, 0);
   potion_method(tpl_vt, "join", potion_tuple_join, "|sep=S");
@@ -986,7 +904,7 @@ void potion_table_init(Potion *P) {
   potion_method(tpl_vt, "sort", potion_tuple_sort, "|block=&");
   potion_method(tpl_vt, "ins_sort", potion_tuple_ins_sort, "|block=&");
   potion_method(tpl_vt, "cmp", potion_tuple_cmp, "value=o");
+  potion_method(tbl_vt, "equal", potion_tuple_equal, "value=o");
   potion_method(tpl_vt, "string", potion_tuple_string, 0);
-  potion_method(P->lobby, "array", potion_lobby_array, "length=N");
-  potion_method(P->lobby, "list", potion_lobby_list, "length=N"); // DEPRECATED
+  potion_method(P->lobby, "list", potion_lobby_list, "length=N");
 }
